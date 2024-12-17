@@ -582,55 +582,58 @@ class TranscriptionHandler:
             # Initialize whisper.cpp model - use more threads on CPU
             model = Model(
                 self.model,  # Uses the GGML model path we configured
-                n_threads=6 if self.device == 'cpu' else 1,
+                n_threads=6 if self.device == "cpu" else 1,
                 print_realtime=False,
-                print_progress=False
+                print_progress=False,
             )
 
             def run_transcription():
                 segments = model.transcribe(str(filepath))
                 chunks = []
-                
+
                 for segment in segments:
                     chunk = {
-                        'timestamp': (float(segment.t0), float(segment.t1)),
-                        'text': segment.text.strip(),
+                        "timestamp": (float(segment.t0), float(segment.t1)),
+                        "text": segment.text.strip(),
                         # Match the word format of other implementations
-                        'words': [{
-                            'word': segment.text.strip(),
-                            'start': float(segment.t0),
-                            'end': float(segment.t1),
-                            'score': 1.0  
-                        }]
+                        "words": [
+                            {
+                                "word": segment.text.strip(),
+                                "start": float(segment.t0),
+                                "end": float(segment.t1),
+                                "score": 1.0,
+                            }
+                        ],
                     }
                     chunks.append(chunk)
-                    
+
                     if self.verbose:
-                        print(chunk['text'])
-                        
+                        print(chunk["text"])
+
                 return chunks
 
             # Add progress bar and run transcription
             chunks = little_helper.run_with_progress(
                 description=f"[cyan]→ Transcribing ({self.device.upper()}) [bold]{filepath.name}",
-                task=run_transcription
+                task=run_transcription,
             )
 
             # Create result dict in same format as other implementations
-            result = {'transcriptions': {}}
-            result['transcriptions'][self.file_language] = {
-                'text': ' '.join([segment['text'].strip() for segment in chunks]),
-                'chunks': chunks
+            result = {"transcriptions": {}}
+            result["transcriptions"][self.file_language] = {
+                "text": " ".join([segment["text"].strip() for segment in chunks]),
+                "chunks": chunks,
             }
 
-            logging.info(f"👨‍💻 Transcription completed in {time.time() - t_start:.2f} sec.")
-            return {'transcription': result}
+            logging.info(
+                f"👨‍💻 Transcription completed in {time.time() - t_start:.2f} sec."
+            )
+            return {"transcription": result}
 
         except Exception as e:
-            print(f'Error during transcription: {e}')
-            logging.error(f'Error during transcription: {e}')
+            print(f"Error during transcription: {e}")
+            logging.error(f"Error during transcription: {e}")
             return None
-
 
     def transcribe_with_faster_whisper(
         self, filepath: Path, num_workers: int = 1
@@ -787,15 +790,26 @@ class TranscriptionHandler:
         logging.info(f"Detecting language of file: {filepath.name}")
 
         def run_language_detection():
-            lang_detection_model = WhisperModel(
-                models.set_supported_model(
-                    self.model_provided, implementation="faster-whisper"
-                ),
-                device="cpu" if self.device in ["mps", "cpu"] else "cuda",
-                compute_type="int8" if self.device in ["mps", "cpu"] else "float16",
-            )
-            lang, score, _ = lang_detection_model.detect_language(audio_array)
-            return lang, score
+            if self.device == "whispercpp":
+                from pywhispercpp.model import Model
+
+                model = Model(self.model)
+                # Note: pywhispercpp handles language detection automatically
+                # Setting language to 'auto' will return the detected language
+                segments = model.transcribe(str(filepath), language="auto")
+                # Get first segment's language (all will be the same)
+                lang = next(segments).language
+                return lang, 1.0  # Score not provided by whisper.cpp
+            else:
+                lang_detection_model = WhisperModel(
+                    models.set_supported_model(
+                        self.model_provided, implementation="faster-whisper"
+                    ),
+                    device="cpu" if self.device in ["mps", "cpu"] else "cuda",
+                    compute_type="int8" if self.device in ["mps", "cpu"] else "float16",
+                )
+                lang, score, _ = lang_detection_model.detect_language(audio_array)
+                return lang, score
 
         lang, score = little_helper.run_with_progress(
             description=f"[dark_goldenrod]→ Detecting language for [bold]{filepath.name}",
