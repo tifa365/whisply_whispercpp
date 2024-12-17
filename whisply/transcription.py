@@ -572,6 +572,7 @@ class TranscriptionHandler:
         Transcribes a file using the whisper.cpp implementation.
         """
         from pywhispercpp.model import Model
+        print(f"Debug - Model path before Model creation: {self.model}") 
         import time
 
         # Start and time transcription
@@ -872,7 +873,7 @@ class TranscriptionHandler:
                 print(f'→ Using whisper.cpp with model "{self.model}"')
                 result_data = self.transcribe_with_whispercpp(filepath)
 
-            if self.device == "mps":
+            elif self.device == "mps":
                 self.model = models.set_supported_model(
                     self.model_provided, implementation="insane-whisper"
                 )
